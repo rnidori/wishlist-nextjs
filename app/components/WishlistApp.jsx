@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Plus,
   X,
@@ -9,17 +9,10 @@ import {
   Trash2,
   ChevronRight,
   ChevronLeft,
-  Sun,
-  Moon,
-  Wine,
-  Eye,
-  Cookie,
-  BookOpen,
-  Coffee,
-  ShoppingBag,
-  Shirt,
-  Gift,
-  Sparkles,
+  Circle,
+  CheckCircle2,
+  GripVertical,
+  Clock,
 } from "lucide-react";
 
 // ---------- 테마 ----------
@@ -52,23 +45,13 @@ const THEME = {
 const FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-// ---------- 아이콘 선택지 ----------
-
-const ICON_MAP = { Wine, Eye, Cookie, BookOpen, Coffee, ShoppingBag, Shirt, Gift, Sparkles };
-const ICON_CHOICES = Object.keys(ICON_MAP);
-
-function CategoryIcon({ name, size = 18, color }) {
-  const Comp = ICON_MAP[name] || Sparkles;
-  return <Comp size={size} color={color} strokeWidth={1.8} />;
-}
-
 // ---------- 기본 데이터 ----------
 
 const STARTER_CATEGORIES = [
   {
     id: "wine",
     name: "와인",
-    icon: "Wine",
+    emoji: "🍷",
     fields: [
       { key: "recommender", label: "추천인", type: "text" },
       { key: "rating", label: "내 선호도", type: "rating" },
@@ -80,7 +63,7 @@ const STARTER_CATEGORIES = [
   {
     id: "lens",
     name: "써클렌즈",
-    icon: "Eye",
+    emoji: "👁️",
     fields: [
       { key: "brand", label: "브랜드", type: "text" },
       { key: "colorName", label: "색상", type: "text" },
@@ -91,7 +74,7 @@ const STARTER_CATEGORIES = [
   {
     id: "cheese",
     name: "치즈",
-    icon: "Cookie",
+    emoji: "🧀",
     fields: [
       { key: "cheeseType", label: "치즈 종류", type: "text" },
       { key: "wineFit", label: "어울리는 와인", type: "text" },
@@ -103,7 +86,7 @@ const STARTER_CATEGORIES = [
   {
     id: "book",
     name: "책",
-    icon: "BookOpen",
+    emoji: "📚",
     fields: [
       {
         key: "genre",
@@ -119,15 +102,15 @@ const STARTER_CATEGORIES = [
 ];
 
 const STARTER_ITEMS = [
-  { id: "i1", categoryId: "wine", name: "샤또 무똥 카데 루즈", memo: "",
+  { id: "i1", categoryId: "wine", name: "샤또 무똥 카데 루즈", memo: "", purchased: false,
     values: { recommender: "민지", rating: 4, price: 45000, when: "스테이크 먹을 때", taste: "바디감 묵직, 타닌 강함" } },
-  { id: "i2", categoryId: "wine", name: "키안티 클라시코", memo: "",
+  { id: "i2", categoryId: "wine", name: "키안티 클라시코", memo: "", purchased: false,
     values: { recommender: "회사 와인모임", rating: 3, price: 32000, when: "가벼운 파스타 안주", taste: "산미 있음, 체리향" } },
-  { id: "i3", categoryId: "lens", name: "글램룩 그레이", memo: "",
+  { id: "i3", categoryId: "lens", name: "글램룩 그레이", memo: "", purchased: false,
     values: { brand: "글램룩", colorName: "그레이", size: "14.2mm", rating: 5 } },
-  { id: "i4", categoryId: "cheese", name: "브리 드 뫼", memo: "",
+  { id: "i4", categoryId: "cheese", name: "브리 드 뫼", memo: "", purchased: false,
     values: { cheeseType: "연성치즈(까망베르류)", wineFit: "샴페인, 가벼운 화이트와인", foodFit: "바게트, 견과류, 꿀", rating: 4, price: 18000 } },
-  { id: "i5", categoryId: "book", name: "달러구트 꿈 백화점", memo: "",
+  { id: "i5", categoryId: "book", name: "달러구트 꿈 백화점", memo: "", purchased: false,
     values: { genre: "소설", recommender: "인스타 북튜버", rating: 4, price: 14800 } },
 ];
 
@@ -152,7 +135,10 @@ function StarRating({ value = 0, onChange, size = 15, readOnly = false, c }) {
           key={s}
           type="button"
           disabled={readOnly}
-          onClick={() => onChange && onChange(s)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onChange && onChange(s);
+          }}
           className={readOnly ? "cursor-default" : "cursor-pointer"}
         >
           <Star
@@ -167,26 +153,11 @@ function StarRating({ value = 0, onChange, size = 15, readOnly = false, c }) {
   );
 }
 
-function Row({ children, onClick, c, last }) {
-  return (
-    <div
-      onClick={onClick}
-      className="flex items-center gap-3 px-4 py-3"
-      style={{
-        borderBottom: last ? "none" : `1px solid ${c.border}`,
-        cursor: onClick ? "pointer" : "default",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 // ---------- 카테고리 추가 모달 ----------
 
 function AddCategoryModal({ onClose, onCreate, c }) {
   const [name, setName] = useState("");
-  const [icon, setIcon] = useState(ICON_CHOICES[0]);
+  const [emoji, setEmoji] = useState("");
   const [fields, setFields] = useState([{ key: nextId("f"), label: "", type: "text" }]);
 
   const addField = () => setFields([...fields, { key: nextId("f"), label: "", type: "text" }]);
@@ -194,11 +165,7 @@ function AddCategoryModal({ onClose, onCreate, c }) {
   const removeField = (idx) => setFields(fields.filter((_, i) => i !== idx));
   const canSave = name.trim() && fields.some((f) => f.label.trim());
 
-  const inputStyle = {
-    backgroundColor: c.surface,
-    color: c.text,
-    border: "none",
-  };
+  const inputStyle = { backgroundColor: c.surface, color: c.text, border: "none" };
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: c.overlay }}>
@@ -222,23 +189,21 @@ function AddCategoryModal({ onClose, onCreate, c }) {
           style={inputStyle}
         />
 
-        <label className="text-xs" style={{ color: c.secondaryText }}>아이콘</label>
-        <div className="grid grid-cols-5 gap-2 mt-1.5 mb-5">
-          {ICON_CHOICES.map((iconName) => {
-            const selected = icon === iconName;
-            return (
-              <button
-                key={iconName}
-                onClick={() => setIcon(iconName)}
-                className="flex items-center justify-center rounded-lg py-2.5"
-                style={{
-                  backgroundColor: selected ? c.accentSoft : c.surface,
-                }}
-              >
-                <CategoryIcon name={iconName} size={18} color={selected ? c.accent : c.secondaryText} />
-              </button>
-            );
-          })}
+        <label className="text-xs" style={{ color: c.secondaryText }}>이모지</label>
+        <div className="flex items-center gap-3 mt-1.5 mb-5">
+          <div
+            className="w-12 h-12 rounded-full flex items-center justify-center text-xl shrink-0"
+            style={{ backgroundColor: c.accentSoft }}
+          >
+            {emoji || "＋"}
+          </div>
+          <input
+            value={emoji}
+            onChange={(e) => setEmoji(e.target.value.slice(0, 4))}
+            placeholder="이모지를 붙여넣어보세요 (예: 🍷)"
+            className="flex-1 px-3 py-2.5 rounded-full text-sm outline-none"
+            style={inputStyle}
+          />
         </div>
 
         <label className="text-xs" style={{ color: c.secondaryText }}>저장할 항목들</label>
@@ -288,7 +253,7 @@ function AddCategoryModal({ onClose, onCreate, c }) {
         <div className="flex gap-2 mt-7">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-lg text-sm font-medium"
+            className="flex-1 py-2.5 rounded-full text-sm font-medium"
             style={{ backgroundColor: c.surface, color: c.text }}
           >
             취소
@@ -296,9 +261,14 @@ function AddCategoryModal({ onClose, onCreate, c }) {
           <button
             disabled={!canSave}
             onClick={() =>
-              onCreate({ id: nextId("cat"), name: name.trim(), icon, fields: fields.filter((f) => f.label.trim()) })
+              onCreate({
+                id: nextId("cat"),
+                name: name.trim(),
+                emoji: emoji || "📦",
+                fields: fields.filter((f) => f.label.trim()),
+              })
             }
-            className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white"
+            className="flex-1 py-2.5 rounded-full text-sm font-medium text-white"
             style={{ backgroundColor: canSave ? c.accent : c.border }}
           >
             만들기
@@ -309,11 +279,13 @@ function AddCategoryModal({ onClose, onCreate, c }) {
   );
 }
 
-// ---------- 아이템 추가 모달 ----------
+// ---------- 아이템 추가/수정 모달 ----------
 
-function AddItemModal({ category, onClose, onCreate, c }) {
-  const [name, setName] = useState("");
-  const [values, setValues] = useState({});
+function ItemModal({ category, initial, onClose, onSave, c }) {
+  const isEdit = !!initial;
+  const [name, setName] = useState(initial?.name || "");
+  const [values, setValues] = useState(initial?.values || {});
+  const [memo, setMemo] = useState(initial?.memo || "");
   const setV = (key, v) => setValues((prev) => ({ ...prev, [key]: v }));
 
   const inputStyle = { backgroundColor: c.surface, color: c.text, border: "none" };
@@ -325,7 +297,9 @@ function AddItemModal({ category, onClose, onCreate, c }) {
         style={{ backgroundColor: c.bg, fontFamily: FONT_STACK }}
       >
         <div className="flex items-center justify-between mb-5">
-          <h3 style={{ fontSize: 19, fontWeight: 600, color: c.text }}>{category.name} 항목 추가</h3>
+          <h3 style={{ fontSize: 19, fontWeight: 600, color: c.text }}>
+            {isEdit ? "항목 수정" : `${category.name} 항목 추가`}
+          </h3>
           <button onClick={onClose}>
             <X size={20} color={c.secondaryText} />
           </button>
@@ -376,19 +350,40 @@ function AddItemModal({ category, onClose, onCreate, c }) {
               </div>
             </div>
           ))}
+
+          <div>
+            <label className="text-xs" style={{ color: c.secondaryText }}>메모</label>
+            <textarea
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              placeholder="자유롭게 메모를 남겨보세요"
+              rows={3}
+              className="w-full mt-1.5 px-3 py-2.5 rounded-lg text-sm outline-none resize-none"
+              style={inputStyle}
+            />
+          </div>
         </div>
 
         <div className="flex gap-2 mt-7">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: c.surface, color: c.text }}>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-full text-sm font-medium" style={{ backgroundColor: c.surface, color: c.text }}>
             취소
           </button>
           <button
             disabled={!name.trim()}
-            onClick={() => onCreate({ id: nextId("item"), categoryId: category.id, name: name.trim(), memo: "", values })}
-            className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white"
+            onClick={() =>
+              onSave({
+                id: initial?.id || nextId("item"),
+                categoryId: category.id,
+                name: name.trim(),
+                memo,
+                purchased: initial?.purchased || false,
+                values,
+              })
+            }
+            className="flex-1 py-2.5 rounded-full text-sm font-medium text-white"
             style={{ backgroundColor: name.trim() ? c.accent : c.border }}
           >
-            저장
+            {isEdit ? "수정 완료" : "저장"}
           </button>
         </div>
       </div>
@@ -396,47 +391,108 @@ function AddItemModal({ category, onClose, onCreate, c }) {
   );
 }
 
-// ---------- 홈 화면 ----------
+// ---------- 홈 화면 (카테고리 목록, 드래그 정렬) ----------
 
-function HomeScreen({ categories, items, onOpenCategory, onAddCategory, dark, onToggleDark, c }) {
+function HomeScreen({ categories, setCategories, items, onOpenCategory, onAddCategory, onOpenSearch, c }) {
+  const [draggingIdx, setDraggingIdx] = useState(null);
+
+  useEffect(() => {
+    if (draggingIdx === null) return;
+
+    const handleMove = (e) => {
+      const point = e.touches ? e.touches[0] : e;
+      const el = document.elementFromPoint(point.clientX, point.clientY);
+      const row = el && el.closest("[data-cat-idx]");
+      if (row) {
+        const idx = Number(row.getAttribute("data-cat-idx"));
+        if (idx !== draggingIdx) {
+          setCategories((prev) => {
+            const arr = [...prev];
+            const [moved] = arr.splice(draggingIdx, 1);
+            arr.splice(idx, 0, moved);
+            return arr;
+          });
+          setDraggingIdx(idx);
+        }
+      }
+    };
+    const handleUp = () => setDraggingIdx(null);
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("touchmove", handleMove, { passive: false });
+    window.addEventListener("touchend", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("touchmove", handleMove);
+      window.removeEventListener("touchend", handleUp);
+    };
+  }, [draggingIdx, setCategories]);
+
   return (
     <div style={{ backgroundColor: c.bg, minHeight: "100vh", fontFamily: FONT_STACK }}>
       <div className="px-5 pt-8 pb-3 flex items-center justify-between">
         <h1 style={{ fontSize: 30, fontWeight: 700, color: c.text, letterSpacing: -0.4 }}>위시리스트</h1>
         <button
-          onClick={onToggleDark}
+          onClick={onOpenSearch}
           className="w-9 h-9 rounded-full flex items-center justify-center"
           style={{ backgroundColor: c.surface }}
         >
-          {dark ? <Sun size={17} color={c.text} /> : <Moon size={17} color={c.text} />}
+          <Search size={16} color={c.text} />
         </button>
       </div>
 
-      <div className="px-5 mt-3">
-        <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: c.bg, border: `1px solid ${c.border}` }}>
-          {categories.map((cat, idx) => (
-            <Row key={cat.id} c={c} last={idx === categories.length - 1} onClick={() => onOpenCategory(cat.id)}>
+      <div className="px-5 mt-3 space-y-2.5">
+        {categories.map((cat, idx) => (
+          <div
+            key={cat.id}
+            data-cat-idx={idx}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-full"
+            style={{
+              backgroundColor: c.surface,
+              opacity: draggingIdx === idx ? 0.6 : 1,
+            }}
+          >
+            <button
+              onClick={() => onOpenCategory(cat.id)}
+              className="flex-1 flex items-center gap-3 text-left"
+            >
               <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                style={{ backgroundColor: c.accentSoft }}
+                className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-base"
+                style={{ backgroundColor: c.bg }}
               >
-                <CategoryIcon name={cat.icon} size={16} color={c.accent} />
+                {cat.emoji || "📦"}
               </div>
               <span className="flex-1 text-[15px]" style={{ color: c.text, fontWeight: 500 }}>{cat.name}</span>
               <span className="text-sm" style={{ color: c.secondaryText }}>
                 {items.filter((i) => i.categoryId === cat.id).length}
               </span>
-              <ChevronRight size={16} color={c.border} />
-            </Row>
-          ))}
-        </div>
+              <ChevronRight size={16} color={c.secondaryText} />
+            </button>
+            <button
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                setDraggingIdx(idx);
+              }}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+                setDraggingIdx(idx);
+              }}
+              style={{ touchAction: "none", cursor: "grab" }}
+              className="p-1 -mr-1 shrink-0"
+            >
+              <GripVertical size={16} color={c.secondaryText} />
+            </button>
+          </div>
+        ))}
 
         <button
           onClick={onAddCategory}
-          className="w-full flex items-center gap-3 px-4 py-3 mt-4 rounded-2xl"
-          style={{ border: `1px solid ${c.border}` }}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-full"
+          style={{ border: `1.5px dashed ${c.border}` }}
         >
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: c.surface }}>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: c.accentSoft }}>
             <Plus size={16} color={c.accent} />
           </div>
           <span className="text-[15px]" style={{ color: c.accent, fontWeight: 500 }}>카테고리 추가</span>
@@ -446,31 +502,166 @@ function HomeScreen({ categories, items, onOpenCategory, onAddCategory, dark, on
   );
 }
 
+// ---------- 검색 화면 ----------
+
+function SearchScreen({ items, categories, recentSearches, onSelectItem, onSearchTerm, onRemoveRecent, onClearRecent, onBack, c }) {
+  const [query, setQuery] = useState("");
+
+  const suggestions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const starts = [];
+    const includes = [];
+    items.forEach((it) => {
+      const n = it.name.toLowerCase();
+      if (n.startsWith(q)) starts.push(it);
+      else if (n.includes(q)) includes.push(it);
+    });
+    return [...starts, ...includes].slice(0, 8);
+  }, [query, items]);
+
+  const catById = (id) => categories.find((c2) => c2.id === id);
+
+  return (
+    <div style={{ backgroundColor: c.bg, minHeight: "100vh", fontFamily: FONT_STACK }}>
+      <div className="px-4 pt-6 pb-3 flex items-center gap-2">
+        <button onClick={onBack} className="p-1 -ml-1">
+          <ChevronLeft size={22} color={c.accent} />
+        </button>
+        <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-full" style={{ backgroundColor: c.surface }}>
+          <Search size={15} color={c.secondaryText} />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && query.trim()) onSearchTerm(query.trim());
+            }}
+            placeholder="아이템 이름으로 검색"
+            className="flex-1 text-sm outline-none bg-transparent"
+            style={{ color: c.text }}
+          />
+          {query && (
+            <button onClick={() => setQuery("")}>
+              <X size={14} color={c.secondaryText} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="px-5">
+        {query.trim() ? (
+          suggestions.length === 0 ? (
+            <div className="text-center py-16 text-sm" style={{ color: c.secondaryText }}>
+              일치하는 아이템이 없어요.
+            </div>
+          ) : (
+            <div className="space-y-1.5 mt-2">
+              {suggestions.map((it) => {
+                const cat = catById(it.categoryId);
+                return (
+                  <button
+                    key={it.id}
+                    onClick={() => {
+                      onSearchTerm(it.name);
+                      onSelectItem(it);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left"
+                    style={{ backgroundColor: c.surface }}
+                  >
+                    <span className="text-base shrink-0">{cat?.emoji || "📦"}</span>
+                    <span className="flex-1 text-[14px]" style={{ color: c.text }}>{it.name}</span>
+                    <span className="text-xs" style={{ color: c.secondaryText }}>{cat?.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )
+        ) : (
+          <div className="mt-2">
+            {recentSearches.length > 0 && (
+              <>
+                <div className="flex items-center justify-between px-1 mb-2">
+                  <span className="text-xs" style={{ color: c.secondaryText }}>최근 검색</span>
+                  <button onClick={onClearRecent} className="text-xs" style={{ color: c.accent }}>전체 삭제</button>
+                </div>
+                <div className="space-y-1">
+                  {recentSearches.map((term) => (
+                    <div
+                      key={term}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl"
+                    >
+                      <Clock size={14} color={c.secondaryText} />
+                      <button
+                        onClick={() => setQuery(term)}
+                        className="flex-1 text-left text-sm"
+                        style={{ color: c.text }}
+                      >
+                        {term}
+                      </button>
+                      <button onClick={() => onRemoveRecent(term)}>
+                        <X size={13} color={c.secondaryText} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------- 카테고리 상세 화면 ----------
 
-function CategoryScreen({ category, items, onBack, onAddItem, onDeleteItem, c }) {
-  const [search, setSearch] = useState("");
+function CategoryScreen({ category, items, onBack, onAddItem, onEditItem, onDeleteItem, onTogglePurchased, initialSearch, c }) {
+  const [search, setSearch] = useState(initialSearch || "");
   const [minRating, setMinRating] = useState(0);
   const [selectFilters, setSelectFilters] = useState({});
+  const [sortBy, setSortBy] = useState("recent");
 
-  const ratingFieldExists = category.fields.some((f) => f.type === "rating");
+  const ratingField = category.fields.find((f) => f.type === "rating");
+  const priceField = category.fields.find((f) => f.type === "number");
   const selectFields = category.fields.filter((f) => f.type === "select" && f.options && f.options.length > 0);
 
-  const filteredItems = useMemo(() => {
-    return items
-      .filter((it) => it.categoryId === category.id)
+  const categoryItems = useMemo(
+    () => items.filter((it) => it.categoryId === category.id),
+    [items, category.id]
+  );
+  const itemIndex = useMemo(() => {
+    const map = {};
+    categoryItems.forEach((it, idx) => { map[it.id] = idx; });
+    return map;
+  }, [categoryItems]);
+
+  const sortedItems = useMemo(() => {
+    const filtered = categoryItems
       .filter((it) => {
         if (!search.trim()) return true;
-        const hay = [it.name, ...Object.values(it.values || {})].join(" ").toLowerCase();
+        const hay = [it.name, it.memo || "", ...Object.values(it.values || {})].join(" ").toLowerCase();
         return hay.includes(search.toLowerCase());
       })
       .filter((it) => {
-        const ratingField = category.fields.find((f) => f.type === "rating");
         if (!ratingField || minRating === 0) return true;
         return Number(it.values[ratingField.key] || 0) >= minRating;
       })
       .filter((it) => Object.entries(selectFilters).every(([key, val]) => !val || it.values[key] === val));
-  }, [items, category, search, minRating, selectFilters]);
+
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      if (!!a.purchased !== !!b.purchased) return a.purchased ? 1 : -1;
+      if (sortBy === "rating" && ratingField) {
+        return Number(b.values[ratingField.key] || 0) - Number(a.values[ratingField.key] || 0);
+      }
+      if (sortBy === "price" && priceField) {
+        return Number(a.values[priceField.key] || 0) - Number(b.values[priceField.key] || 0);
+      }
+      return (itemIndex[b.id] ?? 0) - (itemIndex[a.id] ?? 0);
+    });
+    return arr;
+  }, [categoryItems, search, minRating, selectFilters, sortBy, ratingField, priceField, itemIndex]);
 
   return (
     <div style={{ backgroundColor: c.bg, minHeight: "100vh", fontFamily: FONT_STACK }}>
@@ -500,46 +691,89 @@ function CategoryScreen({ category, items, onBack, onAddItem, onDeleteItem, c })
           />
         </div>
 
-        {(ratingFieldExists || selectFields.length > 0) && (
-          <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-            {ratingFieldExists && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: c.surface }}>
-                <span className="text-xs" style={{ color: c.secondaryText }}>최소</span>
-                <StarRating value={minRating} onChange={(v) => setMinRating(v === minRating ? 0 : v)} size={13} c={c} />
-              </div>
-            )}
-            {selectFields.map((f) => (
-              <select
-                key={f.key}
-                value={selectFilters[f.key] || ""}
-                onChange={(e) => setSelectFilters((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                className="px-3 py-1.5 rounded-full text-xs outline-none"
-                style={{ backgroundColor: c.surface, color: c.text }}
-              >
-                <option value="">{f.label} 전체</option>
-                {f.options.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
-              </select>
-            ))}
-          </div>
-        )}
+        <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="px-3 py-1.5 rounded-full text-xs outline-none"
+            style={{ backgroundColor: c.surface, color: c.text }}
+          >
+            <option value="recent">최근 추가순</option>
+            {ratingField && <option value="rating">평점 높은순</option>}
+            {priceField && <option value="price">{priceField.label} 낮은순</option>}
+          </select>
+
+          {ratingField && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: c.surface }}>
+              <span className="text-xs" style={{ color: c.secondaryText }}>최소</span>
+              <StarRating value={minRating} onChange={(v) => setMinRating(v === minRating ? 0 : v)} size={13} c={c} />
+            </div>
+          )}
+          {selectFields.map((f) => (
+            <select
+              key={f.key}
+              value={selectFilters[f.key] || ""}
+              onChange={(e) => setSelectFilters((prev) => ({ ...prev, [f.key]: e.target.value }))}
+              className="px-3 py-1.5 rounded-full text-xs outline-none"
+              style={{ backgroundColor: c.surface, color: c.text }}
+            >
+              <option value="">{f.label} 전체</option>
+              {f.options.map((opt) => (<option key={opt} value={opt}>{opt}</option>))}
+            </select>
+          ))}
+        </div>
       </div>
 
-      <div className="px-5">
-        {filteredItems.length === 0 ? (
+      <div className="px-5 space-y-2.5">
+        {sortedItems.length === 0 ? (
           <div className="text-center py-16 text-sm" style={{ color: c.secondaryText }}>
             아직 저장된 항목이 없어요.
           </div>
         ) : (
-          <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${c.border}` }}>
-            {filteredItems.map((item, idx) => (
-              <div
-                key={item.id}
-                className="px-4 py-3 group"
-                style={{ borderBottom: idx === filteredItems.length - 1 ? "none" : `1px solid ${c.border}` }}
+          sortedItems.map((item) => (
+            <div
+              key={item.id}
+              onClick={() => onEditItem(item)}
+              className="px-4 py-3.5 rounded-2xl flex gap-3 cursor-pointer"
+              style={{ backgroundColor: c.surface, opacity: item.purchased ? 0.55 : 1 }}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTogglePurchased(item.id);
+                }}
+                className="shrink-0 mt-0.5"
               >
+                {item.purchased ? (
+                  <CheckCircle2 size={20} color={c.accent} />
+                ) : (
+                  <Circle size={20} color={c.secondaryText} />
+                )}
+              </button>
+
+              <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <h4 className="text-[15px]" style={{ color: c.text, fontWeight: 600 }}>{item.name}</h4>
-                  <button onClick={() => onDeleteItem(item.id)}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h4
+                      className="text-[15px] truncate"
+                      style={{
+                        color: c.text,
+                        fontWeight: 600,
+                        textDecoration: item.purchased ? "line-through" : "none",
+                      }}
+                    >
+                      {item.name}
+                    </h4>
+                    {item.purchased && (
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0"
+                        style={{ backgroundColor: c.accentSoft, color: c.accent }}
+                      >
+                        구매완료
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); onDeleteItem(item.id); }} className="shrink-0">
                     <Trash2 size={14} color={c.secondaryText} />
                   </button>
                 </div>
@@ -558,10 +792,15 @@ function CategoryScreen({ category, items, onBack, onAddItem, onDeleteItem, c })
                       </div>
                     );
                   })}
+                  {item.memo && (
+                    <div className="text-[13px] mt-1" style={{ color: c.secondaryText, fontStyle: "italic" }}>
+                      {item.memo}
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))
         )}
       </div>
       <div className="h-8" />
@@ -574,41 +813,87 @@ function CategoryScreen({ category, items, onBack, onAddItem, onDeleteItem, c })
 export default function WishlistApp() {
   const [categories, setCategories] = useState(STARTER_CATEGORIES);
   const [items, setItems] = useState(STARTER_ITEMS);
-  const [view, setView] = useState("home"); // 'home' | 'category'
+  const [view, setView] = useState("home"); // 'home' | 'category' | 'search'
   const [activeCatId, setActiveCatId] = useState(null);
+  const [pendingSearch, setPendingSearch] = useState("");
   const [showAddCat, setShowAddCat] = useState(false);
-  const [showAddItem, setShowAddItem] = useState(false);
+  const [showItemModal, setShowItemModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [recentSearches, setRecentSearches] = useState([]);
   const [dark, setDark] = useState(false);
+
+  // 폰/시스템 다크모드 설정을 그대로 따라감
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    setDark(mq.matches);
+    const handler = (e) => setDark(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   const c = dark ? THEME.dark : THEME.light;
   const activeCat = categories.find((cat) => cat.id === activeCatId);
 
+  const addRecentSearch = (term) => {
+    setRecentSearches((prev) => [term, ...prev.filter((t) => t !== term)].slice(0, 8));
+  };
+
   return (
     <div style={{ backgroundColor: c.bg }}>
-      {view === "home" ? (
+      {view === "home" && (
         <HomeScreen
           categories={categories}
+          setCategories={setCategories}
           items={items}
-          dark={dark}
-          onToggleDark={() => setDark((d) => !d)}
           onOpenCategory={(id) => {
             setActiveCatId(id);
+            setPendingSearch("");
             setView("category");
           }}
           onAddCategory={() => setShowAddCat(true)}
+          onOpenSearch={() => setView("search")}
           c={c}
         />
-      ) : (
-        activeCat && (
-          <CategoryScreen
-            category={activeCat}
-            items={items}
-            onBack={() => setView("home")}
-            onAddItem={() => setShowAddItem(true)}
-            onDeleteItem={(id) => setItems(items.filter((i) => i.id !== id))}
-            c={c}
-          />
-        )
+      )}
+
+      {view === "search" && (
+        <SearchScreen
+          items={items}
+          categories={categories}
+          recentSearches={recentSearches}
+          onSearchTerm={addRecentSearch}
+          onRemoveRecent={(term) => setRecentSearches((prev) => prev.filter((t) => t !== term))}
+          onClearRecent={() => setRecentSearches([])}
+          onSelectItem={(item) => {
+            setActiveCatId(item.categoryId);
+            setPendingSearch(item.name);
+            setView("category");
+          }}
+          onBack={() => setView("home")}
+          c={c}
+        />
+      )}
+
+      {view === "category" && activeCat && (
+        <CategoryScreen
+          category={activeCat}
+          items={items}
+          initialSearch={pendingSearch}
+          onBack={() => setView("home")}
+          onAddItem={() => {
+            setEditingItem(null);
+            setShowItemModal(true);
+          }}
+          onEditItem={(item) => {
+            setEditingItem(item);
+            setShowItemModal(true);
+          }}
+          onDeleteItem={(id) => setItems(items.filter((i) => i.id !== id))}
+          onTogglePurchased={(id) =>
+            setItems(items.map((i) => (i.id === id ? { ...i, purchased: !i.purchased } : i)))
+          }
+          c={c}
+        />
       )}
 
       {showAddCat && (
@@ -621,14 +906,18 @@ export default function WishlistApp() {
           }}
         />
       )}
-      {showAddItem && activeCat && (
-        <AddItemModal
+      {showItemModal && activeCat && (
+        <ItemModal
           c={c}
           category={activeCat}
-          onClose={() => setShowAddItem(false)}
-          onCreate={(item) => {
-            setItems([...items, item]);
-            setShowAddItem(false);
+          initial={editingItem}
+          onClose={() => setShowItemModal(false)}
+          onSave={(item) => {
+            setItems((prev) => {
+              const exists = prev.some((i) => i.id === item.id);
+              return exists ? prev.map((i) => (i.id === item.id ? item : i)) : [...prev, item];
+            });
+            setShowItemModal(false);
           }}
         />
       )}
