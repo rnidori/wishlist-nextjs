@@ -500,8 +500,8 @@ function HomeScreen({ categories, setCategories, items, onOpenCategory, onAddCat
 
   return (
     <div style={{ backgroundColor: c.bg, minHeight: "100vh", fontFamily: FONT_STACK }}>
-      <div className="px-5 pt-8 pb-3 flex items-center justify-between">
-        <h1 style={{ fontSize: 30, fontWeight: 700, color: c.text, letterSpacing: -0.4 }}>위시리스트</h1>
+      <div className="px-5 pt-6 pb-2 flex items-center justify-between">
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: c.text, letterSpacing: -0.4 }}>위시리스트</h1>
         <button
           onClick={onOpenSearch}
           className="w-9 h-9 rounded-full flex items-center justify-center"
@@ -511,12 +511,12 @@ function HomeScreen({ categories, setCategories, items, onOpenCategory, onAddCat
         </button>
       </div>
 
-      <div className="px-5 mt-3 space-y-2.5">
+      <div className="px-5 mt-2 space-y-2">
         {categories.map((cat, idx) => (
           <div
             key={cat.id}
             data-cat-idx={idx}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-full"
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-full"
             style={{
               backgroundColor: c.surface,
               opacity: draggingIdx === idx ? 0.6 : 1,
@@ -566,7 +566,7 @@ function HomeScreen({ categories, setCategories, items, onOpenCategory, onAddCat
 
         <button
           onClick={onAddCategory}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-full"
+          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-full"
           style={{ border: `1.5px dashed ${c.border}` }}
         >
           <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: c.accentSoft }}>
@@ -1057,7 +1057,15 @@ export default function WishlistApp() {
   const oldOpacity = direction === "forward" ? (entered ? 0.5 : 1) : 1;
 
   return (
-    <div style={{ position: "relative", overflow: "hidden", minHeight: "100vh", backgroundColor: c.bg }}>
+    <div
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        minHeight: "100vh",
+        backgroundColor: c.bg,
+        paddingTop: "env(safe-area-inset-top)",
+      }}
+    >
       {prevView && (
         <div
           style={{
