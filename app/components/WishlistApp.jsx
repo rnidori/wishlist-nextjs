@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "../lib/firebase";
 import {
   Plus,
   X,
@@ -13,6 +15,8 @@ import {
   CheckCircle2,
   GripVertical,
   Clock,
+  Pencil,
+  Image as ImageIcon,
 } from "lucide-react";
 
 // ---------- 테마 ----------
@@ -153,12 +157,15 @@ function StarRating({ value = 0, onChange, size = 15, readOnly = false, c }) {
   );
 }
 
-// ---------- 카테고리 추가 모달 ----------
+// ---------- 카테고리 추가/수정 모달 ----------
 
-function AddCategoryModal({ onClose, onCreate, c }) {
-  const [name, setName] = useState("");
-  const [emoji, setEmoji] = useState("");
-  const [fields, setFields] = useState([{ key: nextId("f"), label: "", type: "text" }]);
+function CategoryModal({ initial, onClose, onCreate, onDelete, c }) {
+  const isEdit = !!initial;
+  const [name, setName] = useState(initial?.name || "");
+  const [emoji, setEmoji] = useState(initial?.emoji || "");
+  const [fields, setFields] = useState(
+    initial?.fields?.length ? initial.fields.map((f) => ({ ...f })) : [{ key: nextId("f"), label: "", type: "text" }]
+  );
 
   const addField = () => setFields([...fields, { key: nextId("f"), label: "", type: "text" }]);
   const updateField = (idx, patch) => setFields(fields.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
@@ -168,13 +175,13 @@ function AddCategoryModal({ onClose, onCreate, c }) {
   const inputStyle = { backgroundColor: c.surface, color: c.text, border: "none" };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: c.overlay }}>
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4 modal-overlay-anim" style={{ backgroundColor: c.overlay }}>
       <div
-        className="w-full max-w-md rounded-2xl p-6 max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-md rounded-2xl p-6 max-h-[85vh] overflow-y-auto modal-card-anim"
         style={{ backgroundColor: c.bg, fontFamily: FONT_STACK }}
       >
         <div className="flex items-center justify-between mb-5">
-          <h3 style={{ fontSize: 19, fontWeight: 600, color: c.text }}>새 카테고리</h3>
+          <h3 style={{ fontSize: 19, fontWeight: 600, color: c.text }}>{isEdit ? "카테고리 수정" : "새 카테고리"}</h3>
           <button onClick={onClose}>
             <X size={20} color={c.secondaryText} />
           </button>
@@ -262,7 +269,7 @@ function AddCategoryModal({ onClose, onCreate, c }) {
             disabled={!canSave}
             onClick={() =>
               onCreate({
-                id: nextId("cat"),
+                id: initial?.id || nextId("cat"),
                 name: name.trim(),
                 emoji: emoji || "📦",
                 fields: fields.filter((f) => f.label.trim()),
@@ -271,9 +278,23 @@ function AddCategoryModal({ onClose, onCreate, c }) {
             className="flex-1 py-2.5 rounded-full text-sm font-medium text-white"
             style={{ backgroundColor: canSave ? c.accent : c.border }}
           >
-            만들기
+            {isEdit ? "저장" : "만들기"}
           </button>
         </div>
+
+        {isEdit && (
+          <button
+            onClick={() => {
+              if (window.confirm(`"${initial.name}" 카테고리를 삭제할까요? 안에 있는 항목도 모두 삭제돼요.`)) {
+                onDelete(initial.id);
+              }
+            }}
+            className="w-full text-center text-sm mt-4"
+            style={{ color: c.danger }}
+          >
+            카테고리 삭제
+          </button>
+        )}
       </div>
     </div>
   );
@@ -286,14 +307,38 @@ function ItemModal({ category, initial, onClose, onSave, c }) {
   const [name, setName] = useState(initial?.name || "");
   const [values, setValues] = useState(initial?.values || {});
   const [memo, setMemo] = useState(initial?.memo || "");
+  const [image, setImage] = useState(initial?.image || "");
   const setV = (key, v) => setValues((prev) => ({ ...prev, [key]: v }));
+
+  const handleImagePick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 480;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        setImage(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const inputStyle = { backgroundColor: c.surface, color: c.text, border: "none" };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: c.overlay }}>
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4 modal-overlay-anim" style={{ backgroundColor: c.overlay }}>
       <div
-        className="w-full max-w-md rounded-2xl p-6 max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-md rounded-2xl p-6 max-h-[85vh] overflow-y-auto modal-card-anim"
         style={{ backgroundColor: c.bg, fontFamily: FONT_STACK }}
       >
         <div className="flex items-center justify-between mb-5">
@@ -313,6 +358,28 @@ function ItemModal({ category, initial, onClose, onSave, c }) {
           className="w-full mt-1.5 mb-5 px-3 py-2.5 rounded-lg text-sm outline-none"
           style={inputStyle}
         />
+
+        <label className="text-xs" style={{ color: c.secondaryText }}>이미지</label>
+        <div className="flex items-center gap-3 mt-1.5 mb-5">
+          <label
+            className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden cursor-pointer"
+            style={{ backgroundColor: c.surface }}
+          >
+            {image ? (
+              <img src={image} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <ImageIcon size={20} color={c.secondaryText} />
+            )}
+            <input type="file" accept="image/*" onChange={handleImagePick} className="hidden" />
+          </label>
+          {image ? (
+            <button onClick={() => setImage("")} className="text-sm" style={{ color: c.danger }}>
+              이미지 제거
+            </button>
+          ) : (
+            <span className="text-xs" style={{ color: c.secondaryText }}>탭해서 사진 올리기</span>
+          )}
+        </div>
 
         <div className="space-y-4">
           {category.fields.map((f) => (
@@ -376,6 +443,7 @@ function ItemModal({ category, initial, onClose, onSave, c }) {
                 categoryId: category.id,
                 name: name.trim(),
                 memo,
+                image,
                 purchased: initial?.purchased || false,
                 values,
               })
@@ -393,7 +461,7 @@ function ItemModal({ category, initial, onClose, onSave, c }) {
 
 // ---------- 홈 화면 (카테고리 목록, 드래그 정렬) ----------
 
-function HomeScreen({ categories, setCategories, items, onOpenCategory, onAddCategory, onOpenSearch, c }) {
+function HomeScreen({ categories, setCategories, items, onOpenCategory, onAddCategory, onEditCategory, onOpenSearch, c }) {
   const [draggingIdx, setDraggingIdx] = useState(null);
 
   useEffect(() => {
@@ -469,6 +537,15 @@ function HomeScreen({ categories, setCategories, items, onOpenCategory, onAddCat
                 {items.filter((i) => i.categoryId === cat.id).length}
               </span>
               <ChevronRight size={16} color={c.secondaryText} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditCategory(cat);
+              }}
+              className="p-1 shrink-0"
+            >
+              <Pencil size={14} color={c.secondaryText} />
             </button>
             <button
               onPointerDown={(e) => {
@@ -677,6 +754,7 @@ function CategoryScreen({ category, items, onBack, onAddItem, onEditItem, onDele
 
       <div className="px-5 pt-2 pb-3">
         <h1 style={{ fontSize: 26, fontWeight: 700, color: c.text, letterSpacing: -0.3 }}>{category.name}</h1>
+        <span className="text-sm" style={{ color: c.secondaryText }}>총 {categoryItems.length}개</span>
       </div>
 
       <div className="px-5 pb-3">
@@ -751,6 +829,14 @@ function CategoryScreen({ category, items, onBack, onAddItem, onEditItem, onDele
                 )}
               </button>
 
+              {item.image && (
+                <img
+                  src={item.image}
+                  alt=""
+                  className="w-14 h-14 rounded-xl object-cover shrink-0"
+                />
+              )}
+
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
@@ -810,17 +896,29 @@ function CategoryScreen({ category, items, onBack, onAddItem, onEditItem, onDele
 
 // ---------- 메인 앱 ----------
 
+const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+const depthOf = (v) => (v === "home" ? 0 : 1);
+
 export default function WishlistApp() {
   const [categories, setCategories] = useState(STARTER_CATEGORIES);
   const [items, setItems] = useState(STARTER_ITEMS);
   const [view, setView] = useState("home"); // 'home' | 'category' | 'search'
   const [activeCatId, setActiveCatId] = useState(null);
   const [pendingSearch, setPendingSearch] = useState("");
-  const [showAddCat, setShowAddCat] = useState(false);
+  const [showCatModal, setShowCatModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
   const [showItemModal, setShowItemModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [recentSearches, setRecentSearches] = useState([]);
   const [dark, setDark] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  // 화면 전환 애니메이션 상태
+  const [renderView, setRenderView] = useState("home");
+  const [prevView, setPrevView] = useState(null);
+  const [direction, setDirection] = useState("forward");
+  const [transitioning, setTransitioning] = useState(false);
+  const [entered, setEntered] = useState(true);
 
   // 폰/시스템 다크모드 설정을 그대로 따라감
   useEffect(() => {
@@ -831,6 +929,52 @@ export default function WishlistApp() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // Firestore에서 저장해둔 데이터 불러오기 - 새로고침/다른 기기에서도 유지됨
+  useEffect(() => {
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "wishlist", "data"));
+        if (snap.exists()) {
+          const d = snap.data();
+          if (d.categories) setCategories(d.categories);
+          if (d.items) setItems(d.items);
+          if (d.recentSearches) setRecentSearches(d.recentSearches);
+        }
+      } catch (e) {
+        console.error("Firestore 불러오기 실패", e);
+      }
+      setLoaded(true);
+    })();
+  }, []);
+
+  // 값이 바뀔 때마다 Firestore에 자동 저장 (최초 로드 전에는 덮어쓰지 않음)
+  useEffect(() => {
+    if (!loaded) return;
+    setDoc(doc(db, "wishlist", "data"), { categories, items, recentSearches }, { merge: true }).catch((e) =>
+      console.error("Firestore 저장 실패", e)
+    );
+  }, [categories, items, recentSearches, loaded]);
+
+  useEffect(() => {
+    if (view === renderView) return;
+    const dir = depthOf(view) >= depthOf(renderView) ? "forward" : "back";
+    setDirection(dir);
+    setPrevView(renderView);
+    setRenderView(view);
+    setTransitioning(true);
+    setEntered(false);
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => setEntered(true)));
+    const t = setTimeout(() => {
+      setTransitioning(false);
+      setPrevView(null);
+    }, 340);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
   const c = dark ? THEME.dark : THEME.light;
   const activeCat = categories.find((cat) => cat.id === activeCatId);
 
@@ -838,9 +982,9 @@ export default function WishlistApp() {
     setRecentSearches((prev) => [term, ...prev.filter((t) => t !== term)].slice(0, 8));
   };
 
-  return (
-    <div style={{ backgroundColor: c.bg }}>
-      {view === "home" && (
+  const renderScreen = (name) => {
+    if (name === "home") {
+      return (
         <HomeScreen
           categories={categories}
           setCategories={setCategories}
@@ -850,13 +994,21 @@ export default function WishlistApp() {
             setPendingSearch("");
             setView("category");
           }}
-          onAddCategory={() => setShowAddCat(true)}
+          onAddCategory={() => {
+            setEditingCategory(null);
+            setShowCatModal(true);
+          }}
+          onEditCategory={(cat) => {
+            setEditingCategory(cat);
+            setShowCatModal(true);
+          }}
           onOpenSearch={() => setView("search")}
           c={c}
         />
-      )}
-
-      {view === "search" && (
+      );
+    }
+    if (name === "search") {
+      return (
         <SearchScreen
           items={items}
           categories={categories}
@@ -872,9 +1024,10 @@ export default function WishlistApp() {
           onBack={() => setView("home")}
           c={c}
         />
-      )}
-
-      {view === "category" && activeCat && (
+      );
+    }
+    if (name === "category" && activeCat) {
+      return (
         <CategoryScreen
           category={activeCat}
           items={items}
@@ -894,15 +1047,66 @@ export default function WishlistApp() {
           }
           c={c}
         />
-      )}
+      );
+    }
+    return null;
+  };
 
-      {showAddCat && (
-        <AddCategoryModal
+  const newOffset = direction === "forward" ? (entered ? "0%" : "100%") : (entered ? "0%" : "-28%");
+  const oldOffset = direction === "forward" ? (entered ? "-28%" : "0%") : (entered ? "100%" : "0%");
+  const oldOpacity = direction === "forward" ? (entered ? 0.5 : 1) : 1;
+
+  return (
+    <div style={{ position: "relative", overflow: "hidden", minHeight: "100vh", backgroundColor: c.bg }}>
+      {prevView && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            transform: `translateX(${oldOffset})`,
+            opacity: oldOpacity,
+            transition: `transform 340ms ${EASE}, opacity 340ms ease`,
+            zIndex: direction === "forward" ? 1 : 2,
+            backgroundColor: c.bg,
+          }}
+        >
+          {renderScreen(prevView)}
+        </div>
+      )}
+      <div
+        style={{
+          position: prevView ? "absolute" : "relative",
+          inset: 0,
+          transform: `translateX(${newOffset})`,
+          transition: transitioning ? `transform 340ms ${EASE}` : "none",
+          zIndex: direction === "forward" ? 2 : 1,
+          backgroundColor: c.bg,
+          boxShadow: direction === "forward" && transitioning ? "-8px 0 24px rgba(0,0,0,0.08)" : "none",
+        }}
+      >
+        {renderScreen(renderView)}
+      </div>
+
+      {showCatModal && (
+        <CategoryModal
           c={c}
-          onClose={() => setShowAddCat(false)}
+          initial={editingCategory}
+          onClose={() => setShowCatModal(false)}
           onCreate={(cat) => {
-            setCategories([...categories, cat]);
-            setShowAddCat(false);
+            setCategories((prev) => {
+              const exists = prev.some((x) => x.id === cat.id);
+              return exists ? prev.map((x) => (x.id === cat.id ? cat : x)) : [...prev, cat];
+            });
+            setShowCatModal(false);
+          }}
+          onDelete={(id) => {
+            setCategories((prev) => prev.filter((x) => x.id !== id));
+            setItems((prev) => prev.filter((it) => it.categoryId !== id));
+            setShowCatModal(false);
+            if (activeCatId === id) {
+              setActiveCatId(null);
+              setView("home");
+            }
           }}
         />
       )}
